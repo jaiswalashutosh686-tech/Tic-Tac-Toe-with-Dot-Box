@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070816">
+<meta name="description" content="Neon glassmorphism Tic-Tac-Toe with AI, rewards, themes and custom symbols.">
+<title>Neon Arcade: Tic-Tac-Toe &amp; Dots and Boxes</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❎</text></svg>">
+<!-- Only optional dependency: confetti. The game works fully offline without it. -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+  /* Reset */
+  *,::before,::after{box-sizing:border-box;border:0 solid}
+  body,h1,h2,p{margin:0}
+  body{line-height:1.5;-webkit-font-smoothing:antialiased}
+  button{background:none;padding:0;cursor:pointer;border-radius:0}
+  svg{display:block}
+  :root{--a:#22d3ee;--b:#ff2bd6;--bg:#070816}
+  *{-webkit-tap-highlight-color:transparent}
+  html,body{min-height:100%}
+  body{
+    background-color:var(--bg);
+    background:
+      radial-gradient(60rem 40rem at 10% -10%, color-mix(in srgb,var(--a) 22%,transparent), transparent 60%),
+      radial-gradient(50rem 40rem at 110% 110%, color-mix(in srgb,var(--b) 22%,transparent), transparent 60%),
+      var(--bg);
+    background-attachment:fixed;color:#e8eaff;font-family:ui-rounded,"SF Pro Rounded","Segoe UI",system-ui,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transition:background .6s;
+  }
+  .glass{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);
+    backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:0 10px 40px -10px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08)}
+  .title{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 18px color-mix(in srgb,var(--a) 45%,transparent))}
+  button{touch-action:manipulation;font:inherit;color:inherit}
+  button:focus-visible{outline:2px solid var(--a);outline-offset:3px}
+  button:disabled{cursor:not-allowed}
+
+  /* Board cells */
+  .cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:1.1rem;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);cursor:pointer;
+    font-size:clamp(2.2rem,13vw,4.2rem);line-height:1;transition:transform .25s cubic-bezier(.34,1.56,.64,1),background .25s,box-shadow .25s,opacity .3s}
+  .cell:not(:disabled):hover{transform:translateY(-3px) scale(1.04);background:rgba(255,255,255,.1);
+    box-shadow:0 0 22px -4px color-mix(in srgb,var(--cur,var(--a)) 70%,transparent)}
+  .cell:not(:disabled):active{transform:scale(.94)}
+  .cell:disabled{cursor:default}
+  .cell.dim{opacity:.35}
+  .cell.win{background:color-mix(in srgb,var(--cur,var(--a)) 18%,transparent);animation:glow 1.1s ease-in-out infinite alternate}
+  @keyframes glow{from{box-shadow:0 0 10px -2px var(--cur)}to{box-shadow:0 0 34px 2px var(--cur)}}
+
+  /* Marks */
+  .mk{display:inline-flex;animation:pop .5s cubic-bezier(.34,1.56,.64,1)}
+  .mk-x{color:var(--a);filter:drop-shadow(0 0 10px var(--a))}
+  .mk-o{color:var(--b);filter:drop-shadow(0 0 10px var(--b))}
+  .mk svg{width:58%;height:58%;min-width:1em;min-height:1em;overflow:visible}
+  .cell .mk{width:100%;height:100%;align-items:center;justify-content:center}
+  .mk svg *{fill:none;stroke:currentColor;stroke-width:12;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:draw .45s .05s ease-out forwards}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @keyframes pop{0%{transform:scale(0) rotate(-120deg)}100%{transform:scale(1) rotate(0)}}
+  .sm .mk{animation:none}.sm .mk svg{width:1.3rem;height:1.3rem;min-width:0;min-height:0}.sm .mk svg *{animation:none;stroke-dashoffset:0;stroke-width:14}
+  .sm .mk{font-size:1.25rem}
+  .wline{stroke-dasharray:100;stroke-dashoffset:100;animation:draw .6s .1s ease-out forwards;filter:drop-shadow(0 0 8px var(--a)) drop-shadow(0 0 14px var(--b))}
+
+  /* Segmented controls & chips */
+  .seg{display:flex;gap:.25rem;padding:.25rem;border-radius:.9rem;background:rgba(0,0,0,.28)}
+  .seg button,.chip{flex:1;padding:.5rem .6rem;border-radius:.7rem;font-size:.85rem;font-weight:600;transition:all .25s;color:#b8bde0;background:transparent;border:1px solid transparent}
+  .seg button:hover:not(.on):not(:disabled),.chip:hover:not(.on):not(:disabled){background:rgba(255,255,255,.08);color:#fff}
+  .on{background:linear-gradient(135deg,color-mix(in srgb,var(--a) 35%,transparent),color-mix(in srgb,var(--b) 35%,transparent))!important;color:#fff!important;border-color:rgba(255,255,255,.25)!important;box-shadow:0 0 18px -4px var(--a)}
+  .chip{flex:none;display:inline-flex;align-items:center;gap:.4rem}
+  .turn{transition:all .3s;opacity:.55}
+  .turn.active{opacity:1;transform:scale(1.05);box-shadow:0 0 22px -4px var(--c);border-color:var(--c)}
+  .btn{padding:.7rem 1rem;border-radius:.9rem;font-weight:700;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);transition:all .25s cubic-bezier(.34,1.56,.64,1)}
+  .btn:hover:not(:disabled){transform:translateY(-2px);background:rgba(255,255,255,.13)}
+  .btn:active:not(:disabled){transform:scale(.95)}
+  .btn:disabled{opacity:.35}
+  .btn-primary{background:linear-gradient(135deg,var(--a),var(--b));color:#06071a;border:0;box-shadow:0 8px 30px -8px var(--b)}
+  .btn-primary:hover:not(:disabled){background:linear-gradient(135deg,var(--a),var(--b))}
+  .badge{transition:all .3s}.badge.lock{filter:grayscale(1);opacity:.35}
+  .dab-hit{cursor:pointer;pointer-events:stroke}.dab-hit:hover{stroke:rgba(255,255,255,.3)}
+  .bump{animation:bump .4s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes bump{0%{transform:scale(1.35)}100%{transform:scale(1)}}
+  #modal .panel{animation:rise .5s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes rise{from{transform:translateY(40px) scale(.85);opacity:0}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+  /* Utilities (hand-written, replaces Tailwind) */
+  .absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}
+  .inset-0{top:0;right:0;bottom:0;left:0}.z-50{z-index:50}.pointer-events-none{pointer-events:none}
+  .flex{display:flex}.grid{display:grid}.flex-1{flex:1 1 0%}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}
+  .items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}
+  .grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-cols-6{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}
+  .w-full{width:100%}.h-full{height:100%}.max-w-md{max-width:28rem}.max-w-sm{max-width:24rem}.mx-auto{margin-left:auto;margin-right:auto}
+  .aspect-square{aspect-ratio:1/1}
+  .p-2\.5{padding:.625rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}
+  .py-2{padding-top:.5rem;padding-bottom:.5rem}.py-5{padding-top:1.25rem;padding-bottom:1.25rem}.pb-2{padding-bottom:.5rem}
+  .mb-1\.5{margin-bottom:.375rem}.mb-2{margin-bottom:.5rem}.mb-4{margin-bottom:1rem}.mt-1{margin-top:.25rem}
+  .\!p-2\.5{padding:.625rem!important}.\!rounded-full{border-radius:9999px!important}
+  .rounded-2xl{border-radius:1rem}.rounded-3xl{border-radius:1.5rem}
+  .bg-black\/60{background:rgba(0,0,0,.6)}.backdrop-blur-sm{-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  .opacity-50{opacity:.5}.opacity-70{opacity:.7}
+  .font-semibold{font-weight:600}.font-bold{font-weight:700}.font-extrabold{font-weight:800}
+  .text-xs{font-size:.75rem;line-height:1rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-2xl{font-size:1.5rem;line-height:2rem}
+  .text-3xl{font-size:1.875rem;line-height:2.25rem}.text-6xl{font-size:3.75rem;line-height:1}
+  .text-\[\.6rem\]{font-size:.6rem}.text-\[\.65rem\]{font-size:.65rem}.text-\[\.7rem\]{font-size:.7rem}
+  .leading-tight{line-height:1.25}.tracking-tight{letter-spacing:-.025em}
+  .text-center{text-align:center}.text-left{text-align:left}
+  .text-slate-300{color:#cbd5e1}.text-slate-400{color:#94a3b8}.text-amber-300{color:#fcd34d}
+  .underline{text-decoration:underline}.underline-offset-4{text-underline-offset:4px}.hover\:text-white:hover{color:#fff}
+  @media (min-width:640px){.sm\:gap-3{gap:.75rem}.sm\:p-4{padding:1rem}.sm\:py-8{padding-top:2rem;padding-bottom:2rem}.sm\:text-4xl{font-size:2.25rem;line-height:2.5rem}}
+  .hidden{display:none}
+</style>
+</head>
+<body class="antialiased">
+<main id="app" class="mx-auto w-full max-w-md px-4 py-5 sm:py-8 flex flex-col gap-4">
+
+  <header class="flex items-center justify-between">
+    <h1 class="title text-3xl sm:text-4xl font-extrabold tracking-tight">Neon Arcade</h1>
+    <button data-act="mute" class="btn !p-2.5 !rounded-full" aria-label="Toggle sound" id="muteBtn">🔊</button>
+  </header>
+  <div class="seg" id="gameSeg" aria-label="Choose game">
+    <button data-act="game" data-v="ttt">Tic-Tac-Toe</button>
+    <button data-act="game" data-v="dab">Dots &amp; Boxes</button>
+  </div>
+
+  <!-- Scoreboard -->
+  <section class="grid grid-cols-4 gap-2" aria-label="Scoreboard">
+    <div class="glass rounded-2xl p-2.5 text-center"><div class="text-[.7rem] text-slate-300" id="l1">Wins</div><div id="sW" class="text-2xl font-extrabold" style="color:var(--a)">0</div></div>
+    <div class="glass rounded-2xl p-2.5 text-center"><div class="text-[.7rem] text-slate-300" id="l2">Losses</div><div id="sL" class="text-2xl font-extrabold" style="color:var(--b)">0</div></div>
+    <div class="glass rounded-2xl p-2.5 text-center"><div class="text-[.7rem] text-slate-300">Draws</div><div id="sD" class="text-2xl font-extrabold">0</div></div>
+    <div class="glass rounded-2xl p-2.5 text-center"><div class="text-[.7rem] text-slate-300">Streak 🔥</div><div id="sS" class="text-2xl font-extrabold text-amber-300">0</div><div id="sB" class="text-[.6rem] text-slate-400">Best 0</div></div>
+  </section>
+
+  <!-- Turn indicators + status -->
+  <section class="flex items-center justify-between gap-2" aria-label="Game status">
+    <div id="p1" class="turn sm glass rounded-2xl px-3 py-2 flex items-center gap-2 text-sm font-semibold" style="--c:var(--a)"></div>
+    <div id="status" class="text-center text-sm font-semibold flex-1" role="status" aria-live="polite"></div>
+    <div id="p2" class="turn sm glass rounded-2xl px-3 py-2 flex items-center gap-2 text-sm font-semibold" style="--c:var(--b)"></div>
+  </section>
+
+  <!-- Board -->
+  <div id="series" class="glass rounded-2xl px-4 py-2 flex items-center justify-between text-sm font-semibold" aria-live="polite"></div>
+
+  <section class="relative">
+    <div id="board" class="glass relative grid gap-2.5 sm:gap-3 p-3 sm:p-4 rounded-3xl" aria-label="Tic-tac-toe board"></div>
+    <svg id="dab" class="hidden w-full glass rounded-3xl p-3" role="group" aria-label="Dots and Boxes board"></svg>
+    <svg id="line" class="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true"></svg>
+  </section>
+
+  <!-- Actions -->
+  <section class="grid grid-cols-2 gap-3">
+    <button data-act="undo" id="undoBtn" class="btn">↶ Undo move</button>
+    <button data-act="again" id="newBtn" class="btn btn-primary">↻ New round</button>
+  </section>
+
+  <!-- Settings -->
+  <section class="glass rounded-3xl p-4 flex flex-col gap-4" aria-label="Settings">
+    <div>
+      <div class="text-xs text-slate-300 mb-1.5">Game mode</div>
+      <div class="seg" id="modeSeg">
+        <button data-act="mode" data-v="ai">Player vs AI</button>
+        <button data-act="mode" data-v="pvp">Pass &amp; play</button>
+      </div>
+    </div>
+    <div id="diffWrap">
+      <div class="text-xs text-slate-300 mb-1.5">AI difficulty</div>
+      <div class="seg" id="diffSeg">
+        <button data-act="diff" data-v="easy">Easy</button>
+        <button data-act="diff" data-v="medium">Medium</button>
+        <button data-act="diff" data-v="hard">Unbeatable</button>
+      </div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-300 mb-1.5">Board size</div>
+      <div class="seg" id="sizeSeg">
+        <button data-act="size" data-v="3">3×3</button>
+        <button data-act="size" data-v="4">4×4</button>
+        <button data-act="size" data-v="5">5×5</button>
+      </div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-300 mb-1.5">Match format</div>
+      <div class="seg" id="boSeg">
+        <button data-act="bo" data-v="1">Single</button>
+        <button data-act="bo" data-v="3">Best of 3</button>
+        <button data-act="bo" data-v="5">Best of 5</button>
+      </div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-300 mb-1.5">Symbols</div>
+      <div class="flex flex-wrap gap-2 sm" id="packs"></div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-300 mb-1.5">Glow themes</div>
+      <div class="flex flex-wrap gap-2" id="themes"></div>
+    </div>
+  </section>
+
+  <!-- Trophies -->
+  <section class="glass rounded-3xl p-4" aria-label="Rewards">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-bold">Trophy shelf</h2><span id="bCount" class="text-xs text-slate-300"></span>
+    </div>
+    <div id="badges" class="grid grid-cols-6 gap-2"></div>
+  </section>
+
+  <footer class="text-center pb-2">
+    <button data-act="resetStats" class="text-xs text-slate-400 underline underline-offset-4 hover:text-white">Reset all stats &amp; rewards</button>
+  </footer>
+</main>
+
+<!-- Celebration modal -->
+<div id="modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="panel glass rounded-3xl p-6 w-full max-w-sm text-center" style="background:rgba(14,16,40,.85)">
+    <div id="mIcon" class="text-6xl mb-2">🏆</div>
+    <h2 id="mTitle" class="title text-3xl font-extrabold">Victory!</h2>
+    <p id="mSub" class="text-slate-300 mt-1 mb-4"></p>
+    <div id="mRewards" class="flex flex-col gap-2 mb-4"></div>
+    <div class="grid grid-cols-2 gap-3">
+      <button data-act="close" class="btn">View board</button>
+      <button data-act="again" id="mAgain" class="btn btn-primary">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Constants ---------- */
+const $ = s => document.querySelector(s);
+const KEY = 'neon-ttt-v1';
+let N = 3, K = 3, LINES = [];   // board size, symbols needed in a row, winning lines
+function buildLines(){
+  LINES = [];
+  for(let r = 0; r < N; r++) for(let c = 0; c < N; c++)
+    for(const [dr, dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+      const er = r + dr*(K-1), ec = c + dc*(K-1);
+      if(er < 0 || er >= N || ec < 0 || ec >= N) continue;
+      LINES.push(Array.from({length:K}, (_, k) => (r + dr*k)*N + c + dc*k));
+    }
+}
+const SVG_X = '<svg viewBox="0 0 100 100"><path d="M22 22L78 78M78 22L22 78" pathLength="100"/></svg>';
+const SVG_O = '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="30" pathLength="100"/></svg>';
+const PACKS = {
+  classic:{n:'Classic'}, cyber:{n:'Cyber',x:'⚡',o:'🔮'}, animals:{n:'Pets',x:'🐱',o:'🐶'},
+  space:{n:'Space',x:'🚀',o:'🪐'}, elements:{n:'Elements',x:'🔥',o:'❄️'}
+};
+const THEMES = {
+  neon:{n:'Neon',a:'#22d3ee',b:'#ff2bd6'},
+  aurora:{n:'Aurora',a:'#34d399',b:'#a78bfa',need:'five',hint:'Win 5 games'},
+  solar:{n:'Solar',a:'#fbbf24',b:'#fb7185',need:'ten',hint:'Win 10 games'},
+  royal:{n:'Royal',a:'#f5d061',b:'#8b5cf6',need:'match',hint:'Win a match'}
+};
+const REWARDS = [
+  {id:'first',icon:'🥇',name:'First Victory',desc:'Win your first game',test:s=>s.w>=1},
+  {id:'trio',icon:'🔥',name:'Hat Trick',desc:'Win 3 games in a row',test:s=>s.best>=3},
+  {id:'five',icon:'🌌',name:'Aurora Theme',desc:'Win 5 games — unlocks the Aurora glow',test:s=>s.w>=5},
+  {id:'ten',icon:'☀️',name:'Solar Theme',desc:'Win 10 games — unlocks the Solar glow',test:s=>s.w>=10},
+  {id:'champ',icon:'🏆',name:'Digital Trophy',desc:'Reach a 5-win streak',test:s=>s.best>=5},
+  {id:'peace',icon:'🤝',name:'Diplomat',desc:'Draw 5 games',test:s=>s.d>=5},
+  {id:'box',icon:'📦',name:'Box Boss',desc:'Win a Dots & Boxes game',test:s=>s.dw>=1},
+  {id:'big',icon:'🧠',name:'Big Brain',desc:'Win on a 4×4 or 5×5 board',test:s=>s.big>=1},
+  {id:'match',icon:'👑',name:'Match King',desc:'Win a best-of-3 or best-of-5 match — unlocks the Royal glow',test:s=>s.sw>=1},
+  {id:'vet',icon:'🎮',name:'Regular',desc:'Play 25 games',test:s=>s.g>=25}
+];
+const DEFAULTS = {stats:{w:0,l:0,d:0,streak:0,best:0,g:0,dw:0,sw:0,big:0},unlocked:[],theme:'neon',pack:'classic',mode:'ai',diff:'hard',mute:false,game:'ttt',size:3,bo:1};
+
+/* ---------- Persistent state (localStorage with safe fallbacks) ---------- */
+function load(){
+  const d = JSON.parse(JSON.stringify(DEFAULTS));
+  try{
+    const r = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if(r && typeof r === 'object'){ Object.assign(d, r); d.stats = Object.assign({}, DEFAULTS.stats, r.stats); }
+  }catch(e){ /* storage unavailable or corrupt: use defaults */ }
+  for(const k of Object.keys(d.stats)) if(!Number.isFinite(d.stats[k])) d.stats[k] = 0;
+  if(!PACKS[d.pack]) d.pack = 'classic';
+  if(!['ai','pvp'].includes(d.mode)) d.mode = 'ai';
+  if(!['easy','medium','hard'].includes(d.diff)) d.diff = 'hard';
+  if(!Array.isArray(d.unlocked)) d.unlocked = [];
+  if(!['ttt','dab'].includes(d.game)) d.game = 'ttt';
+  if(![3,4,5].includes(d.size)) d.size = 3;
+  if(![1,3,5].includes(d.bo)) d.bo = 1;
+  if(!THEMES[d.theme] || (THEMES[d.theme].need && !d.unlocked.includes(THEMES[d.theme].need))) d.theme = 'neon';
+  return d;
+}
+const S = load();
+const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} };
+
+/* ---------- Game state ---------- */
+let board, turn, over, hist, busy, timer, winLine, series, dab;
+const cells = [];
+
+/* ---------- Audio (WebAudio, fails silently) ---------- */
+let ac;
+function tone(f, d = .12, type = 'sine', when = 0, g = .06){
+  if(S.mute) return;
+  try{
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if(ac.state === 'suspended') ac.resume();
+    const o = ac.createOscillator(), v = ac.createGain(), t = ac.currentTime + when;
+    o.type = type; o.frequency.value = f;
+    v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(v); v.connect(ac.destination); o.start(t); o.stop(t + d);
+  }catch(e){}
+}
+const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} };
+
+/* ---------- Helpers ---------- */
+const rnd = a => a[Math.floor(Math.random() * a.length)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const empties = b => b.reduce((r, v, i) => (v ? r : (r.push(i), r)), []);
+function sym(p){
+  const k = PACKS[S.pack], cls = p === 'X' ? 'mk mk-x' : 'mk mk-o';
+  if(S.pack === 'classic') return `<span class="${cls}">${p === 'X' ? SVG_X : SVG_O}</span>`;
+  return `<span class="${cls}">${p === 'X' ? k.x : k.o}</span>`;
+}
+function winner(b){
+  for(const l of LINES) if(b[l[0]] && l.every(i => b[i] === b[l[0]])) return {p:b[l[0]], l};
+  return null;
+}
+
+/* ---------- AI ---------- */
+    function findLine(p){ // index that completes a line for p, else null
+  for(const l of LINES){
+    const v = l.map(i => board[i]);
+    if(v.filter(x => x === p).length === K - 1 && v.includes(null)) return l[v.indexOf(null)];
+  }
+  return null;
+}
+function minimax(b, isO, d, al, be){
+  const w = winner(b);
+  if(w) return w.p === 'O' ? 10 - d : d - 10;
+  if(b.every(Boolean)) return 0;
+  let best = isO ? -99 : 99;
+  for(let i = 0; i < N*N; i++){
+    if(b[i]) continue;
+    b[i] = isO ? 'O' : 'X';
+    const s = minimax(b, !isO, d + 1, al, be);
+    b[i] = null;
+    if(isO){ best = Math.max(best, s); al = Math.max(al, s); } else { best = Math.min(best, s); be = Math.min(be, s); }
+    if(be <= al) break;
+  }
+  return best;
+}
+function aiPick(){
+  const e = empties(board);
+  if(S.diff === 'easy') return rnd(e);
+  if(S.diff === 'medium'){
+    if(Math.random() < .3) return rnd(e);               // occasional blunder
+    const m = findLine('O'); if(m !== null) return m;     // win
+    const k = findLine('X'); if(k !== null) return k;     // block
+    const mid = N*N >> 1; return board[mid] === null ? mid : rnd(e);
+  }
+  // Unbeatable: full minimax, random choice among equally optimal moves for variety
+  if(N > 3){ // minimax is too slow on big boards: win, then block, then best-scoring cell
+    const w = findLine('O'); if(w !== null) return w;
+    const k = findLine('X'); if(k !== null) return k;
+    const sc = i => LINES.reduce((s, l) => { if(!l.includes(i)) return s; const v = l.map(j => board[j]); return v.includes('X') && v.includes('O') ? s : s + (v.filter(x => x === 'O').length + 1) ** 2 + v.filter(x => x === 'X').length ** 2; }, 0);
+    const top = Math.max(...e.map(sc)); return rnd(e.filter(i => sc(i) === top));
+  }
+  let best = -99, picks = [];
+  for(const i of e){
+    board[i] = 'O'; const s = minimax(board, false, 1, -99, 99); board[i] = null;
+    if(s > best){ best = s; picks = [i]; } else if(s === best) picks.push(i);
+  }
+  return rnd(picks);
+}
+
+/* ---------- Core flow ---------- */
+function buildBoard(){
+  const bd = $('#board'); bd.innerHTML = ''; cells.length = 0;
+  bd.style.gridTemplateColumns = `repeat(${N}, minmax(0, 1fr))`;
+  for(let i = 0; i < N*N; i++){
+    const b = document.createElement('button');
+    b.className = 'cell'; b.type = 'button'; b.dataset.act = 'cell'; b.dataset.v = i;
+    b.style.fontSize = `calc(clamp(2.2rem,13vw,4.2rem) * ${3/N})`;
+    bd.appendChild(b); cells.push(b);
+  }
+}
+function newRound(){
+  clearTimeout(timer);
+  N = S.size; K = Math.min(N, 4); buildLines(); buildBoard();
+  board = Array(N*N).fill(null); turn = 'X'; over = false; hist = []; busy = false; winLine = null;
+  if(S.game === 'dab') dabReset();
+  closeModal(); render();
+}
+function newSeries(){ series = {a:0, b:0, played:0, done:false}; newRound(); }
+
+/* ----- Dots & Boxes: h = horizontal edges, v = vertical edges, own = box owners ----- */
+function dabReset(){
+  const B = S.size, D = B + 1, grid = (r, c) => Array.from({length:r}, () => Array(c).fill(null));
+  dab = {B, h:grid(D, B), v:grid(B, D), own:grid(B, B), sc:{X:0, O:0}};
+}
+const sides = (r, c) => [dab.h[r][c], dab.h[r+1][c], dab.v[r][c], dab.v[r][c+1]].filter(Boolean).length;
+const boxesOf = (t, r, c) => (t === 'h' ? [[r-1, c], [r, c]] : [[r, c-1], [r, c]]).filter(([a, b]) => a >= 0 && b >= 0 && a < dab.B && b < dab.B);
+function dabFree(){
+  const o = [];
+  ['h','v'].forEach(t => dab[t].forEach((row, r) => row.forEach((x, c) => { if(!x) o.push([t, r, c]); })));
+  return o;
+}
+function dabAiPick(){
+  const free = dabFree(); if(S.diff === 'easy') return rnd(free);
+  const gain = m => boxesOf(...m).filter(([a, b]) => sides(a, b) === 3).length;  // boxes this edge completes
+  const risk = m => boxesOf(...m).filter(([a, b]) => sides(a, b) === 2).length;  // gives opponent a 3-sided box
+  const take = free.filter(m => gain(m) > 0);
+  if(take.length && (S.diff === 'hard' || Math.random() < .7)) return rnd(take);
+  const safe = free.filter(m => !risk(m));
+  return rnd(safe.length && (S.diff === 'hard' || Math.random() < .6) ? safe : free);
+}
+function dabMove(t, r, c){
+  if(over || dab[t][r][c]) return;
+  dab[t][r][c] = turn;
+  let got = 0;
+  for(const [br, bc] of boxesOf(t, r, c)) if(!dab.own[br][bc] && sides(br, bc) === 4){ dab.own[br][bc] = turn; dab.sc[turn]++; got++; }
+  tone(got ? 740 : 460, .12, 'triangle'); buzz(12);
+  if(dab.sc.X + dab.sc.O === dab.B * dab.B){
+    const {X, O} = dab.sc; finish(X === O ? null : {p: X > O ? 'X' : 'O', l: []});
+  } else {
+    if(!got) turn = turn === 'X' ? 'O' : 'X';   // completing a box earns another turn
+    if(S.mode === 'ai' && turn === 'O'){
+      busy = true;
+      timer = setTimeout(() => {
+        busy = false;
+        try{ dabMove(...dabAiPick()); }
+        catch(err){ console.error(err); const f = dabFree()[0]; if(f) dabMove(...f); }
+      }, 450 + Math.random() * 300);
+    }
+  }
+  render();
+}
+function dabSvg(){
+  const B = dab.B, g = 60, m = 20, W = B*g + 2*m, col = p => p === 'X' ? 'var(--a)' : 'var(--b)', pk = PACKS[S.pack];
+  const mark = p => S.pack === 'classic' ? (p === 'X' ? '✕' : '◯') : (p === 'X' ? pk.x : pk.o);
+  const can = !over && !busy && !(S.mode === 'ai' && turn === 'O');
+  let boxes = '', lines = '', dots = '', hits = '';
+  dab.own.forEach((row, r) => row.forEach((p, c) => { if(p) boxes += `<rect x="${m + c*g + 4}" y="${m + r*g + 4}" width="${g-8}" height="${g-8}" rx="8" fill="${col(p)}" opacity=".25"/><text x="${m + c*g + g/2}" y="${m + r*g + g/2 + 8}" text-anchor="middle" font-size="22" style="fill:${col(p)}">${mark(p)}</text>`; }));
+  ['h','v'].forEach(t => dab[t].forEach((row, r) => row.forEach((p, c) => {
+    const x1 = m + c*g, y1 = m + r*g, x2 = t === 'h' ? x1 + g : x1, y2 = t === 'h' ? y1 : y1 + g, xy = `x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke-linecap="round"`;
+    lines += `<line ${xy} stroke="${p ? col(p) : 'rgba(255,255,255,.14)'}" stroke-width="${p ? 6 : 3}" style="${p ? 'filter:drop-shadow(0 0 5px ' + col(p) + ')' : ''}"/>`;
+    if(!p && can) hits += `<line class="dab-hit" data-act="edge" data-v="${t},${r},${c}" ${xy} stroke="transparent" stroke-width="22"/>`;
+  })));
+  for(let r = 0; r <= B; r++) for(let c = 0; c <= B; c++) dots += `<circle cx="${m + c*g}" cy="${m + r*g}" r="4.5" fill="#e8eaff"/>`;
+  $('#dab').setAttribute('viewBox', `0 0 ${W} ${W}`);
+  $('#dab').innerHTML = boxes + lines + dots + hits;
+}
+function move(i){
+  if(over || board[i] !== null) return;
+  board[i] = turn; hist.push(i);
+  tone(turn === 'X' ? 520 : 390, .12, 'triangle'); buzz(12);
+  const w = winner(board);
+  if(w) finish(w);
+  else if(board.every(Boolean)) finish(null);
+  else {
+    turn = turn === 'X' ? 'O' : 'X';
+    if(S.mode === 'ai' && turn === 'O'){
+      busy = true;
+      timer = setTimeout(() => {
+        busy = false;
+        try{ move(aiPick()); }
+        catch(err){ console.error(err); const f = board.indexOf(null); if(f > -1) move(f); }
+      }, 450 + Math.random() * 350);
+    }
+  }
+  render();
+}
+function finish(w){
+  over = true; busy = false; winLine = w;
+  const st = S.stats;
+  if(w){
+    if(w.p === 'X'){ st.w++; st.streak++; st.best = Math.max(st.best, st.streak); }
+    else { st.l++; st.streak = 0; }
+  } else st.d++;
+  st.g++;
+  if(w && w.p === 'X'){ if(S.game === 'dab') st.dw++; if(S.size > 3) st.big++; }
+  // Best-of-N match bookkeeping
+  series.played++; if(w) series[w.p === 'X' ? 'a' : 'b']++;
+  const need = Math.ceil(S.bo / 2);
+  if(S.bo === 1 || series.a >= need || series.b >= need || series.played >= S.bo){
+    series.done = true;
+    if(S.bo > 1 && series.a > series.b) st.sw++;
+  }
+  const fresh = REWARDS.filter(r => !S.unlocked.includes(r.id) && r.test(st));
+  fresh.forEach(r => S.unlocked.push(r.id));
+  save();
+  const celebrate = w && (S.mode === 'pvp' || w.p === 'X');
+  timer = setTimeout(() => {
+    if(!celebrate) tone(w ? 200 : 300, .4, 'sawtooth', 0, .04);
+    openModal(w, fresh);   // popup on every round end: win, loss, draw or match result
+  }, celebrate ? 900 : 700);
+  if(celebrate) [523,659,784,1047].forEach((f, k) => tone(f, .25, 'triangle', k * .1 + .2));
+}
+function undo(){
+  if(busy || over || !hist.length) return;
+  board[hist.pop()] = null;
+  if(S.mode === 'ai' && hist.length % 2 === 1) board[hist.pop()] = null; // also take back the AI reply
+  turn = hist.length % 2 === 0 ? 'X' : 'O';
+  tone(300, .1); render();
+}
+
+/* ---------- Celebration ---------- */
+function party(){
+  if(typeof confetti !== 'function') return;
+  try{
+    const colors = [css('--a'), css('--b'), '#ffffff', '#fde047'], end = Date.now() + 1600;
+    const o = {particleCount:5, spread:65, colors, disableForReducedMotion:true};
+    confetti({particleCount:130, spread:100, origin:{y:.6}, colors, disableForReducedMotion:true});
+    (function f(){
+      confetti({...o, angle:60, origin:{x:0, y:.8}}); confetti({...o, angle:120, origin:{x:1, y:.8}});
+      if(Date.now() < end) requestAnimationFrame(f);
+    })();
+  }catch(e){}
+}
+function openModal(w, fresh){
+  const ai = S.mode === 'ai', human = w && w.p === 'X';
+  $('#mIcon').textContent = !w ? '🤝' : (ai && !human) ? '🤖' : '🏆';
+  $('#mTitle').textContent = !w ? 'Draw' : ai ? (human ? 'Victory!' : 'AI wins') : `Player ${w.p === 'X' ? 1 : 2} wins!`;
+  const mw = series.a > series.b ? (ai ? 'You win the match!' : 'P1 wins the match!') : series.a < series.b ? (ai ? 'AI wins the match' : 'P2 wins the match!') : 'Match tied';
+  const ser = S.bo > 1 ? ` · Match ${series.a}–${series.b}${series.done ? ' · ' + mw : ''}` : '';
+  $('#mSub').textContent = (w && (!ai || human) ? `Win streak: ${S.stats.streak} · Total wins: ${S.stats.w}` : w ? 'Rematch? Streaks reset on a loss.' : 'Nobody wins this round.') + ser;
+  if(S.bo > 1 && series.done){   // final match result headline
+    $('#mTitle').textContent = mw;
+    $('#mIcon').textContent = series.a === series.b ? '🤝' : (ai && series.b > series.a) ? '🤖' : '👑';
+  }
+  $('#mAgain').textContent = series.done ? (S.bo > 1 ? 'New match' : 'Play again') : 'Next round';
+  $('#mRewards').innerHTML = fresh.map(r => `<div class="glass rounded-2xl p-3 flex items-center gap-3 text-left"><span class="text-3xl">${r.icon}</span><div><div class="text-xs" style="color:var(--a)">Reward unlocked</div><div class="font-bold leading-tight">${r.name}</div><div class="text-xs text-slate-300">${r.desc}</div></div></div>`).join('');
+  $('#modal').classList.remove('hidden'); $('#modal').classList.add('flex');
+  $('#mAgain').focus();
+  if(w && (!ai || human)) party();
+  if(fresh.length) [660,880,1320].forEach((f, k) => tone(f, .2, 'sine', k * .12));
+  render();
+}
+function closeModal(){ $('#modal').classList.add('hidden'); $('#modal').classList.remove('flex'); }
+
+/* ---------- Rendering ---------- */
+function drawLine(still){
+  const el = $('#line');
+  if(!winLine || !winLine.l.length){ el.innerHTML = ''; return; }
+  const br = $('#board').getBoundingClientRect(), pt = i => { const r = cells[i].getBoundingClientRect(); return [r.left + r.width/2 - br.left, r.top + r.height/2 - br.top]; };
+  const a = pt(winLine.l[0]), b = pt(winLine.l[winLine.l.length - 1]);
+  el.setAttribute('viewBox', `0 0 ${br.width} ${br.height}`);
+  el.innerHTML = `<defs><linearGradient id="lg" gradientUnits="userSpaceOnUse" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"><stop offset="0" style="stop-color:var(--a)"/><stop offset="1" style="stop-color:var(--b)"/></linearGradient></defs><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="url(#lg)" stroke-width="9" stroke-linecap="round" pathLength="100" class="wline" ${still ? 'style="animation:none;stroke-dashoffset:0"' : ''}/>`;
+}
+function render(){
+  const ai = S.mode === 'ai', aiTurn = ai && turn === 'O';
+  cells.forEach((c, i) => {
+    const v = board[i], key = (v || '') + S.pack;
+    if(c.dataset.k !== key){ c.innerHTML = v ? sym(v) : ''; c.dataset.k = key; }
+    c.disabled = !!v || over || busy || aiTurn;
+    c.style.setProperty('--cur', v === 'O' ? css('--b') : css('--a'));
+    const isWin = !!(winLine && winLine.l.includes(i));
+    c.classList.toggle('win', isWin); c.classList.toggle('dim', over && !!winLine && !isWin);
+    c.setAttribute('aria-label', `Cell ${i + 1}: ${v ? (v === 'X' ? 'first symbol' : 'second symbol') : 'empty'}`);
+  });
+  // Status text
+  let t;
+  if(over) t = winLine ? (ai ? (winLine.p === 'X' ? 'You win! 🎉' : 'AI wins') : `Player ${winLine.p === 'X' ? 1 : 2} wins! 🎉`) : "It's a draw";
+  else if(busy) t = 'AI is thinking…';
+  else t = ai ? 'Your move' : `Player ${turn === 'X' ? 1 : 2}'s move`;
+  $('#status').textContent = t;
+  $('#p1').innerHTML = `${ai ? 'You' : 'P1'} ${sym('X')}`; $('#p2').innerHTML = `${ai ? 'AI' : 'P2'} ${sym('O')}`;
+  $('#p1').classList.toggle('active', !over && turn === 'X'); $('#p2').classList.toggle('active', !over && turn === 'O');
+  $('#undoBtn').disabled = busy || over || !hist.length;
+  // Stats
+  const st = S.stats, set = (id, v) => { const e = $(id); if(e.textContent !== String(v)){ e.textContent = v; e.classList.remove('bump'); void e.offsetWidth; e.classList.add('bump'); } };
+  set('#sW', st.w); set('#sL', st.l); set('#sD', st.d); set('#sS', st.streak); $('#sB').textContent = 'Best ' + st.best;
+  $('#l1').textContent = ai ? 'Wins' : 'P1 wins'; $('#l2').textContent = ai ? 'Losses' : 'P2 wins';
+  // Settings UI
+  $('#diffWrap').style.display = ai ? '' : 'none';
+  [['gameSeg','game'],['sizeSeg','size'],['boSeg','bo']].forEach(([id, k]) => document.querySelectorAll('#' + id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === String(S[k]))));
+  const dabOn = S.game === 'dab';
+  $('#board').style.display = dabOn ? 'none' : ''; $('#line').style.display = dabOn ? 'none' : ''; $('#dab').classList.toggle('hidden', !dabOn);
+  const info = dabOn ? `Boxes ${dab.sc.X}–${dab.sc.O}` : `${N}×${N} · ${K} in a row`;
+  $('#series').innerHTML = S.bo > 1
+    ? `<span>Best of ${S.bo}${series.done ? ' · final' : ''}</span><span>${ai ? 'You' : 'P1'} <b style="color:var(--a)">${series.a}</b> – <b style="color:var(--b)">${series.b}</b> ${ai ? 'AI' : 'P2'}</span><span class="text-xs text-slate-300">${info}</span>`
+    : `<span>Single game</span><span class="text-xs text-slate-300">${info}</span>`;
+  $('#newBtn').textContent = series.done && S.bo > 1 ? '🏁 New match' : '↻ New round';
+  if(dabOn) dabSvg();
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === S.mode));
+  document.querySelectorAll('#diffSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === S.diff));
+  $('#muteBtn').textContent = S.mute ? '🔇' : '🔊';
+  $('#packs').innerHTML = Object.entries(PACKS).map(([id, p]) =>
+    `<button data-act="pack" data-v="${id}" class="chip glass ${id === S.pack ? 'on' : ''}" aria-pressed="${id === S.pack}">${id === 'classic' ? `<span class="mk mk-x">${SVG_X}</span><span class="mk mk-o">${SVG_O}</span>` : `<span>${p.x}${p.o}</span>`}<span>${p.n}</span></button>`).join('');
+  $('#themes').innerHTML = Object.entries(THEMES).map(([id, t]) => {
+    const locked = t.need && !S.unlocked.includes(t.need);
+    return `<button data-act="theme" data-v="${id}" ${locked ? 'disabled title="' + t.hint + '"' : ''} class="chip glass ${id === S.theme ? 'on' : ''} ${locked ? 'opacity-50' : ''}" aria-pressed="${id === S.theme}"><span style="width:.9rem;height:.9rem;border-radius:99px;background:linear-gradient(135deg,${t.a},${t.b})"></span>${t.n}${locked ? ' 🔒 <span class="text-[.65rem] opacity-70">' + t.hint + '</span>' : ''}</button>`;
+  }).join('');
+  $('#badges').innerHTML = REWARDS.map(r => { const u = S.unlocked.includes(r.id); return `<div class="badge ${u ? '' : 'lock'} glass rounded-2xl aspect-square flex items-center justify-center text-2xl" title="${r.name}: ${r.desc}" role="img" aria-label="${r.name}, ${u ? 'unlocked' : 'locked'}: ${r.desc}">${r.icon}</div>`; }).join('');
+  $('#bCount').textContent = `${S.unlocked.length}/${REWARDS.length} unlocked`;
+  drawLine(true);
+}
+function applyTheme(){
+  const t = THEMES[S.theme];
+  document.documentElement.style.setProperty('--a', t.a); document.documentElement.style.setProperty('--b', t.b);
+}
+
+/* ---------- Events ---------- */
+function onAct(e){
+  const el = e.target.closest('[data-act]'); if(!el || el.disabled) return;
+  const v = el.dataset.v;
+  switch(el.dataset.act){
+    case 'cell': if(!busy && !over && !(S.mode === 'ai' && turn === 'O')) move(+v); return;
+    case 'undo': undo(); return;
+    case 'edge': { const [t, r, c] = v.split(','); if(!busy && !over && !(S.mode === 'ai' && turn === 'O')) dabMove(t, +r, +c); return; }
+    case 'again': if(series.done) newSeries(); else newRound(); return;
+    case 'close': closeModal(); return;
+    case 'mute': S.mute = !S.mute; save(); tone(600); render(); return;
+    case 'mode': case 'diff': case 'game': case 'size': case 'bo': {
+      const k = el.dataset.act, val = isNaN(+v) ? v : +v;
+      if(S[k] !== val){ S[k] = val; save(); newSeries(); }   // changing any setting starts a fresh match
+      return;
+    }
+    case 'pack': S.pack = v; save(); render(); return;
+    case 'theme': S.theme = v; save(); applyTheme(); render(); return;
+    case 'resetStats':
+      if(!el.dataset.arm){
+        el.dataset.arm = '1'; el.textContent = 'Tap again to confirm reset';
+        setTimeout(() => { delete el.dataset.arm; el.textContent = 'Reset all stats & rewards'; }, 3000);
+      } else {
+        delete el.dataset.arm; el.textContent = 'Reset all stats & rewards';
+        S.stats = {...DEFAULTS.stats}; S.unlocked = []; S.theme = 'neon'; save(); applyTheme(); newSeries();
+      }
+  }
+}
+function init(){
+  document.addEventListener('click', onAct);
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape') closeModal();
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); undo(); }
+  });
+  window.addEventListener('resize', () => drawLine(true));
+  applyTheme(); newSeries();
+}
+init();
+})();
+</script>
+</body>
+</html>
